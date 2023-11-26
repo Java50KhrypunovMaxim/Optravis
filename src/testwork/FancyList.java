@@ -5,41 +5,46 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 public class FancyList<T> {
 
-	private List<T> list = new ArrayList<>();
-	private LinkedList<T> removeList = new LinkedList<>();
-	private LinkedList<T> addList = new LinkedList<>();
-	private LinkedList<Integer> lastOperation = new LinkedList<>();
-	private LinkedList<Integer> indexRemove = new LinkedList<>();
-	private List<String> metadataList = new ArrayList<>();
+	List<Item<T>> list = new ArrayList<>();
+	private final Stack<HistoryItem<Item<T>>> history = new Stack<>();
+	private int undoRedoPointer = -1;
+
+	private void deleteElementsAfterPointer(int undoRedoPointer) {
+		if (history.size() > undoRedoPointer + 1) {
+			history.subList(undoRedoPointer + 1, history.size()).clear();
+		}
+	}
 
 	public void add(T elem) {
-		list.add(elem);
-		addList.add(elem);
-		lastOperation.add(0);
-		metadataList.add(null);
+		deleteElementsAfterPointer(undoRedoPointer);
+		Item<T> item = new Item<>(elem);
+		list.add(item);
+		HistoryItem<Item<T>> hi = new HistoryItem<>(0, list.size() - 1, item, null);
+		history.push(hi);
+		undoRedoPointer++;
 	}
 
 	public boolean contains(T elem) {
-		return list.contains(elem);
+		for (Item<T> item : list) {
+			if (item.getValue() == elem)
+				return true;
+		}
+		return false;
 	}
 
 	public void remove(int index) {
-		if (index < 0 || index >= list.size()) {
-			throw new IndexOutOfBoundsException("Index out of bounds");
-		}
-
-		T remElem = list.remove(index);
-		removeList.add(remElem);
-		lastOperation.add(1);
-		indexRemove.add(index);
-		metadataList.remove(index);
+		deleteElementsAfterPointer(undoRedoPointer);
+		HistoryItem<Item<T>> hi = new HistoryItem<>(1, index, list.remove(index), null);
+		history.push(hi);
+		undoRedoPointer++;
 	}
 
 	public T get(int index) {
-		return list.get(index);
+		return list.get(index).getValue();
 	}
 
 	public int giveMeSize() {
@@ -47,30 +52,42 @@ public class FancyList<T> {
 	}
 
 	public void undo() {
-		int lastOper = lastOperation.getLast();
-		if (lastOper == 0 && !addList.isEmpty()) {
-			T lastAddElem = addList.removeLast();
-			list.remove(lastAddElem);
-			metadataList.remove(metadataList.size() - 1);
-		} else if (lastOper == 1 && !removeList.isEmpty() && !indexRemove.isEmpty()) {
-			int lastIndex = indexRemove.removeLast();
-			T lastRemoveElem = removeList.removeLast();
-			list.add(lastIndex, lastRemoveElem);
-			metadataList.add(lastIndex, null);
+		if (undoRedoPointer < 0)
+			return;
+
+		HistoryItem<Item<T>> hi = history.get(undoRedoPointer);
+		if (hi.operation == 0) {
+			list.remove(hi.index);
+		} else {
+			list.add(hi.index, hi.value);
 		}
+		undoRedoPointer--;
 	}
 
-	public void setMetadata(int index, String metadata) {
-		if (index < 0 || index >= metadataList.size()) {
-			throw new IndexOutOfBoundsException("Index out of bounds");
+	public void redo() {
+		if (undoRedoPointer == history.size() - 1)
+			return;
+
+		undoRedoPointer++;
+		HistoryItem<Item<T>> hi = history.get(undoRedoPointer);
+		if (hi.operation == 0) {
+			list.add(hi.index, hi.value);
+		} else {
+			list.remove(hi.index);
 		}
-		metadataList.set(index, metadata);
 	}
 
 	public String getMetadata(int index) {
-		if (index < 0 || index >= metadataList.size()) {
-			throw new IndexOutOfBoundsException("Index out of bounds");
-		}
-		return metadataList.get(index);
+		return list.get(index).getMetadata();
 	}
+
+	public void setMetadata(int index, String metadata) {
+		Item<T> item = list.get(index);
+		String previousMetadata = item.getMetadata();
+		item.setMetadata(metadata);
+		HistoryItem<Item<T>> hi = new HistoryItem<>(2, index, item, previousMetadata);
+		history.push(hi);
+		undoRedoPointer++;
+	}
+
 }
